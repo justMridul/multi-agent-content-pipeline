@@ -1,163 +1,671 @@
 # 🤖 Autonomous Multi-Agent Content Pipeline
 
-> **Transform Product Requirements Documents (PRDs) into research-backed, fact-checked, and publication-ready blog posts using an orchestrated multi-agent AI system.**
+> **Turn a Product Requirements Document (PRD) into a research-backed, fact-checked, and publication-ready blog post using a multi-agent AI workflow.**
+
+An end-to-end AI content generation system built with **Python, LangGraph, LangChain, Groq, SerpAPI, FastAPI, Next.js, React, TypeScript, and Supabase**.
+
+The system takes a Product Requirements Document (PRD), researches the topic using live web search, generates a structured article, fact-checks the generated claims, automatically sends the draft back for revision when necessary, and finally polishes the article for publication.
 
 ---
 
-## 📌 Overview
+## 📌 What is this project?
 
-Writing technical blog posts from Product Requirements Documents (PRDs) typically requires manual research, writing, fact-checking, and editing. 
+Creating a high-quality technical blog post usually requires several separate tasks:
 
-This project automates that end-to-end pipeline using an autonomous **Multi-Agent Architecture** orchestrated via **LangGraph**. Instead of relying on a single monolithic prompt, the system breaks down generation into four specialized, stateful AI agents—each responsible for a single stage in the content publishing workflow.
+1. Understanding the requirements
+2. Researching the topic
+3. Writing the article
+4. Verifying facts
+5. Editing and formatting the final content
 
----
+Instead of performing all these tasks with one large AI prompt, this project divides the workflow into **four specialized AI agents**.
 
-## 🏗️ System Architecture & Workflow
+Each agent has one responsibility and passes its output to the next agent through a shared workflow state.
 
-The system is structured as a stateful graph where data flows sequentially through four specialized agents, with automated validation loops:
+The workflow is orchestrated using **LangGraph**, which allows the agents to communicate through a stateful graph and supports conditional routing and iteration.
+
+### In simple terms:
 
 ```text
-[ PRD Input ]
-      │
-      ▼
-┌─────────────────────────┐
-│  01. Research Agent     │ ──► Searches live web via SerpAPI for real-time sources & facts
-└─────────────────────────┘
-      │
-      ▼
-┌─────────────────────────┐
-│  02. Writer Agent       │ ──► Drafts structured Markdown article via Groq (Llama-3.1-8b)
-└─────────────────────────┘
-      │
-      ▼
-┌─────────────────────────┐
-│  03. Fact-Checker Agent │ ──► Cross-checks claims against research; loops back if errors exist
-└─────────────────────────┘
-      │
-      ▼
-┌─────────────────────────┐
-│  04. Polisher Agent     │ ──► Refines tone, style, readability, and final formatting
-└─────────────────────────┘
-      │
-      ▼
-[ Published Post + Live Supabase Logs + Next.js Timeline UI ]
+PRD
+ │
+ ▼
+Research the topic
+ │
+ ▼
+Write the first draft
+ │
+ ▼
+Check the facts
+ │
+ ├── ❌ Problems found
+ │       │
+ │       ▼
+ │    Rewrite draft
+ │       │
+ │       └──────► Fact Check again
+ │
+ └── ✅ Passed
+         │
+         ▼
+    Polish the article
+         │
+         ▼
+   Final Blog Post
 
-🧠 Agent Breakdown
-Research Agent (researcher.py): Accepts topic inputs and queries the live web using SerpAPI to gather real-time citations, data points, and background context.
+   🏗️ System Architecture
 
-Writer Agent (writer.py): Evaluates the PRD alongside the retrieved web findings to generate an initial structured Markdown draft using Groq (llama-3.1-8b-instant).
+The application consists of a Next.js frontend, a Python AI backend, external AI/search services, and a Supabase PostgreSQL database.
+ 
+                          ┌──────────────────────┐
+                         │      Next.js UI      │
+                         │ React + TypeScript   │
+                         │    Tailwind CSS      │
+                         └──────────┬───────────┘
+                                    │
+                                    │ HTTP
+                                    ▼
+                         ┌──────────────────────┐
+                         │     FastAPI API      │
+                         │     Python Backend   │
+                         └──────────┬───────────┘
+                                    │
+                                    ▼
+                         ┌──────────────────────┐
+                         │      LangGraph       │
+                         │ Workflow Orchestrator│
+                         └──────────┬───────────┘
+                                    │
+              ┌─────────────────────┼─────────────────────┐
+              │                     │                     │
+              ▼                     ▼                     ▼
+       ┌─────────────┐       ┌─────────────┐      ┌─────────────┐
+       │  Researcher │       │    Writer   │      │Fact Checker │
+       │    Agent    │──────►│    Agent    │─────►│    Agent    │
+       └──────┬──────┘       └─────────────┘      └──────┬──────┘
+              │                                           │
+              ▼                                      ┌────┴────┐
+       ┌─────────────┐                               │         │
+       │   SerpAPI   │                               ▼         ▼
+       │ Live Search │                           ❌ Rewrite   ✅ Continue
+       └─────────────┘                               │
+                                                     │
+                                                     ▼
+                                              ┌─────────────┐
+                                              │   Polisher  │
+                                              │    Agent    │
+                                              └──────┬──────┘
+                                                     │
+                                                     ▼
+                                              ┌─────────────┐
+                                              │ Final Blog  │
+                                              │    Post     │
+                                              └──────┬──────┘
+                                                     │
+                                                     ▼
+                                              ┌─────────────┐
+                                              │  Supabase   │
+                                              │ PostgreSQL  │
+                                              └─────────────┘
 
-Fact-Checker Agent (fact_checker.py): Performs structured validation by cross-referencing draft claims against the research findings. Returns a JSON payload containing pass/fail status and identified discrepancies.
+   
+ 🤖 Multi-Agent Workflow
 
-Style-Polisher Agent (polisher.py): Receives verified drafts to optimize tone, sentence structure, flow, and visual Markdown layout before saving the final deliverable.
+The core of the project is a four-agent pipeline orchestrated using LangGraph.
 
-🛠️ Tech Stack
-Backend & AI Architecture
-Language/Framework: Python 3.10+, FastAPI, Uvicorn
+1. 🔎 Research Agent
 
-Agent Orchestration: LangGraph & LangChain (Stateful state graph & conditional routing)
+File: researcher.py
 
-LLM Provider: Groq API (llama-3.1-8b-instant for low-latency inference)
+The Research Agent is responsible for gathering information before the article is written.
 
-Live Search Integration: SerpAPI (Google Search API)
+It:
 
-Frontend & User Interface
-Framework: Next.js 14+ (App Router), React, TypeScript
+Receives the topic and PRD requirements.
+Uses SerpAPI to perform live web searches.
+Collects relevant search results.
+Extracts useful facts, data points, and background information.
+Provides the research context to the Writer Agent.
+Technologies
+Python
+SerpAPI
+LangChain
+Structured workflow state
 
-Styling: Tailwind CSS (Modern dark-mode design system)
+PRD / Topic
+     │
+     ▼
+Research Agent
+     │
+     ▼
+SerpAPI
+     │
+     ▼
+Search Results
+     │
+     ▼
+Research Context
 
-Icons: Lucide React
+✍️ 2. Writer Agent
 
-Database & Observability
-Database: Supabase (PostgreSQL)
+File: writer.py
 
-Logging & Telemetry: Custom execution logging tracking token count, step durations, and post histories across every pipeline run.
+The Writer Agent combines the original PRD with the research gathered by the Research Agent.
 
-📂 Project Structure - 
+It generates a structured Markdown article based on:
 
-  multi-agent-content-pipeline/
-├── python-agents/          # Backend Microservice (FastAPI + LangGraph)
-│   ├── agents/             # Modular agent logic
-│   │   ├── researcher.py   # Web search agent (SerpAPI)
-│   │   ├── writer.py       # Drafting agent (Groq Llama-3.1)
-│   │   ├── fact_checker.py # Claim verification & evaluation
-│   │   └── polisher.py     # Style and formatting agent
-│   ├── graph.py            # LangGraph workflow orchestration & state definition
-│   ├── main.py             # FastAPI entry point (/generate endpoint)
-│   ├── migrations/         # Supabase SQL schema definitions
-│   └── requirements.txt    # Python dependencies
+Topic
+PRD requirements
+Research findings
+Target word count
+Requested writing style
+
+The agent uses the Groq API for fast LLM inference.
+Current LLM
+openai/gpt-oss-120b
+
+The Writer Agent is designed to produce a complete first draft rather than a short summary.
+
+PRD
+ │
+ ├──────────────┐
+ │              │
+ ▼              ▼
+Requirements   Research
+ │              │
+ └──────┬───────┘
+        ▼
+   Writer Agent
+        │
+        ▼
+ Markdown Draft
+
+ 🔍 3. Fact-Checker Agent
+
+File: fact_checker.py
+
+The Fact-Checker Agent validates the generated article against the research gathered earlier in the workflow.
+
+It checks whether the claims made in the article are supported by the available research.
+
+The agent produces a structured result containing:
+
+Pass / Fail status
+Identified discrepancies
+Verification information
+Conditional workflow
+
+This is one of the important parts of the project.
+
+If the article passes fact-checking:
+Fact Check
+    │
+    └── ✅ PASS
+           │
+           ▼
+       Polisher
+
+If problems are found:
+
+Fact Check
+    │
+    └── ❌ FAIL
+           │
+           ▼
+       Writer Agent
+           │
+           ▼
+      New Draft
+           │
+           ▼
+      Fact Checker
+
+
+The workflow supports multiple fact-checking iterations before continuing to the polishing stage.
+
+This conditional routing is handled using LangGraph.
+
+✨ 4. Style Polisher Agent
+
+File: polisher.py
+
+After the content passes validation, the Style Polisher prepares the article for final publication.
+
+It improves:
+
+Writing style
+Sentence structure
+Readability
+Flow
+Markdown formatting
+Overall presentation
+
+The result is the final publication-ready blog post.
+
+Fact-Checked Draft
+        │
+        ▼
+   Polisher Agent
+        │
+        ▼
+Final Markdown Article
+🧠 Why LangGraph?
+
+Instead of simply calling an LLM four times sequentially, this project uses LangGraph to represent the entire content pipeline as a stateful graph.
+
+The workflow maintains shared state containing information such as:
+
+PRD
+Topic
+Target Length
+Writing Style
+Research Data
+Draft Content
+Fact Check Status
+Fact Check Iterations
+Final Content
+Metadata
+
+This allows each agent to access the information produced by previous stages.
+
+More importantly, LangGraph enables conditional routing.
+
+For example:
+
+              ┌──────────────┐
+              │ Fact Checker │
+              └───────┬──────┘
+                      │
+              ┌───────┴────────┐
+              │                │
+            PASS              FAIL
+              │                │
+              ▼                ▼
+          Polisher           Writer
+                               │
+                               ▼
+                         Fact Checker
+
+This makes the system more than a simple linear LLM pipeline.
+
+🛠️ Technology Stack
+Backend & AI
+
+  | Technology       | Purpose                             |
+| ---------------- | ----------------------------------- |
+| **Python**       | Core backend and agent development  |
+| **FastAPI**      | Backend API layer                   |
+| **Uvicorn**      | ASGI server                         |
+| **LangGraph**    | Multi-agent workflow orchestration  |
+| **LangChain**    | LLM integration and agent utilities |
+| **Groq API**     | Fast LLM inference                  |
+| **GPT-OSS 120B** | Primary language model              |
+| **SerpAPI**      | Live web research and search        |
+| **Pydantic**     | Data validation and structured data |
+
+
+   Frontend
+
+   | Technology       | Purpose                        |
+| ---------------- | ------------------------------ |
+| **Next.js**      | Frontend framework             |
+| **React**        | UI development                 |
+| **TypeScript**   | Type-safe frontend development |
+| **Tailwind CSS** | Styling and responsive UI      |
+| **Lucide React** | UI icons                       |
+ 
+   
+   Database & Observability
+
+   | Technology                  | Purpose                          |
+| --------------------------- | -------------------------------- |
+| **Supabase**                | Backend database and persistence |
+| **PostgreSQL**              | Relational database              |
+| **Custom Agent Logs**       | Pipeline execution tracking      |
+| **Supabase SQL Migrations** | Database schema management       |
+
+
+  📊 Application Features
+📝 PRD Input Engine
+
+Users can provide:
+
+Product requirements
+Topic
+Target word count
+Writing style
+
+The information becomes the initial input to the multi-agent workflow.
+
+🔎 Live Web Research
+
+The Research Agent uses SerpAPI to search the web for relevant information.
+
+This provides the Writer and Fact Checker with research context rather than relying entirely on the model's internal knowledge.
+
+🤖 Multi-Agent Generation
+
+Instead of one large prompt, the system separates responsibilities between:
+
+Researcher
+    ↓
+Writer
+    ↓
+Fact Checker
+    ↓
+Polisher
+
+Each agent has a focused role.
+
+🔄 Automated Fact-Checking Loop
+
+The Fact Checker can send the content back to the Writer when issues are detected.
+
+Writer
+  ↓
+Fact Checker
+  ↓
+  ├── PASS → Polisher
+  │
+  └── FAIL → Writer → Fact Checker
+
+The workflow limits the number of iterations to prevent endless loops.
+
+📈 Real-Time Agent Timeline
+
+The frontend provides a timeline showing the progress of the pipeline.
+
+Example:
+
+✓ PRD Received
 │
-├── nextjs-app/             # Frontend Application (Next.js)
+✓ Research Completed
+│
+✓ Writer Draft Generated
+│
+✓ Fact Check Completed
+│
+✓ Style Polished
+│
+✓ Final Blog Generated
+
+This makes the normally hidden AI workflow visible to the user.
+
+📚 Persistent Post Library
+
+Generated articles are stored in Supabase PostgreSQL.
+
+Users can:
+
+Browse generated posts
+Open previous articles
+Review generated content
+Copy content
+Export content
+📊 Agent Observability
+
+Each pipeline execution can be logged and tracked.
+
+The system records information such as:
+
+Agent Name
+Execution Status
+Execution Duration
+Token Usage
+Generated Output
+Fact Check Result
+Post ID
+Timestamp
+
+This makes it easier to understand and debug individual agent executions.
+
+📂 Project Structure
+multi-agent-content-pipeline/
+│
+├── python-agents/
+│   │
+│   ├── agents/
+│   │   ├── researcher.py
+│   │   ├── writer.py
+│   │   ├── fact_checker.py
+│   │   └── polisher.py
+│   │
+│   ├── migrations/
+│   │   ├── 001_create_agent_logs.sql
+│   │   ├── 002_create_posts.sql
+│   │   └── 003_add_post_id_to_agent_logs.sql
+│   │
+│   ├── graph.py
+│   ├── main.py
+│   ├── requirements.txt
+│   └── .env
+│
+├── nextjs-app/
+│   │
 │   ├── app/
-│   │   ├── generate/       # PRD submission & post creation form
-│   │   ├── posts/          # Library of generated articles
-│   │   ├── timeline/       # Real-time visual timeline of agent steps
-│   │   └── api/            # Internal Next.js API routes
-│   └── package.json
+│   │   ├── generate/
+│   │   ├── posts/
+│   │   ├── timeline/
+│   │   └── api/
+│   │
+│   ├── package.json
+│   └── ...
 │
-├── .env.example            # Environment variable template
-└── README.md               # Project documentation
+├── .env.example
+├── .gitignore
+└── README.md
 
-🚀 Getting Started (Local Setup)
+
+  🔄 End-to-End Example
+
+Suppose the user provides a PRD for:
+
+"Write a technical blog explaining how AI agents can automate software development workflows."
+
+The pipeline works like this:
+
+Step 1 — PRD
+
+The user submits:
+
+Topic:
+AI Agents in Software Development
+
+Target Length:
+1500 words
+
+Style:
+Technical but beginner-friendly
+Step 2 — Research Agent
+
+The Research Agent searches the web using SerpAPI.
+
+It collects:
+
+Search Results
+      ↓
+Relevant Sources
+      ↓
+Facts
+      ↓
+Research Context
+Step 3 — Writer Agent
+
+The Writer receives:
+
+PRD
++
+Research
++
+Target Word Count
++
+Writing Style
+
+and generates:
+
+Markdown Blog Draft
+Step 4 — Fact Checker
+
+The Fact Checker examines the draft.
+
+If everything is supported:
+
+PASS
+ ↓
+Polisher
+
+If unsupported claims are found:
+
+FAIL
+ ↓
+Writer
+ ↓
+New Draft
+ ↓
+Fact Checker
+Step 5 — Style Polisher
+
+The verified article is sent to the Polisher.
+
+It improves:
+
+Structure
+Readability
+Tone
+Grammar
+Markdown
+Formatting
+Step 6 — Final Output
+
+The final article is saved and displayed through the frontend.
+
+PRD
+ ↓
+Research
+ ↓
+Draft
+ ↓
+Fact Check
+ ↓
+Polish
+ ↓
+🚀 Publication-Ready Blog Post
+🚀 Getting Started
 Prerequisites
-Node.js (v18+) & npm
 
-Python (v3.10+)
+Make sure you have:
 
-API Keys for Groq, SerpAPI, and Supabase
+Python 3.10+
+Node.js 18+
+npm
+A Groq API key
+A SerpAPI API key
+A Supabase project
+1. Clone the Repository
+git clone https://github.com/justMridul/multi-agent-content-pipeline.git
 
-1. Environment Configuration
-Create a .env file in the root directory:
+cd multi-agent-content-pipeline
+2. Configure Environment Variables
 
-# Supabase Configuration
-SUPABASE_URL=[https://your-supabase-project.supabase.co](https://your-supabase-project.supabase.co)
+Create a .env file according to .env.example.
+
+Example:
+
+# =========================
+# Supabase
+# =========================
+
+SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_KEY=your_supabase_service_role_key
-NEXT_PUBLIC_SUPABASE_URL=[https://your-supabase-project.supabase.co](https://your-supabase-project.supabase.co)
+
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_KEY=your_supabase_anon_key
 
+
+# =========================
 # External APIs
-SERPAPI_API_KEY=your_serpapi_key
+# =========================
+
+SERPAPI_API_KEY=your_serpapi_api_key
+
 GROQ_API_KEY=your_groq_api_key
 
-# Model Configuration
-LLM_MODEL=llama-3.1-8b-instant
+
+# =========================
+# LLM Configuration
+# =========================
+
+LLM_MODEL=openai/gpt-oss-120b
 LLM_TEMPERATURE=0.7
 
-# Server Endpoints
+
+# =========================
+# Backend
+# =========================
+
 FASTAPI_URL=http://localhost:8000
 
-2. Database Migration
-Run the provided SQL scripts in your Supabase Dashboard → SQL Editor to create the required tables:
+Important: Never commit your .env file or API keys to GitHub.
 
-python-agents/migrations/001_create_agent_logs.sql
+3. Configure Supabase
 
-python-agents/migrations/002_create_posts.sql
+Open your Supabase project and run the SQL migrations located in:
 
-python-agents/migrations/003_add_post_id_to_agent_logs.sql
+python-agents/migrations/
 
-3. Backend Setup (FastAPI)
+Run them in the following order:
 
-# Navigate to backend directory
+001_create_agent_logs.sql
+002_create_posts.sql
+003_add_post_id_to_agent_logs.sql
+
+These migrations create the database tables required for:
+
+Posts
+Agent execution logs
+Post-agent relationships
+4. Start the Python Backend
+
+Navigate to the backend:
+
 cd python-agents
 
-# Create & activate virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+Create a virtual environment:
 
-# Install dependencies
+Windows
+python -m venv venv
+venv\Scripts\activate
+macOS / Linux
+python3 -m venv venv
+source venv/bin/activate
+
+Install dependencies:
+
 pip install -r requirements.txt
 
-# Start FastAPI server
+Start the backend:
+
 python main.py
 
-he web interface will be accessible at http://localhost:3000.
+The FastAPI backend will run on:
 
-📊 Application Features
-PRD Input Engine: Submit detailed product requirements along with custom target word counts and tone styles.
+http://localhost:8000
+5. Start the Next.js Frontend
 
-Step-by-Step Agent Timeline: View real-time agent output logs (/timeline/[postId]), showcasing raw search context, writer drafts, fact-check results, and final polisher outputs.
+Open another terminal.
 
-Persistent Post Library: Browse, review, copy, and export generated blog posts stored in PostgreSQL.
+Navigate to:
 
-📄 License
-This project is licensed under the MIT License.
+cd nextjs-app
+
+Install dependencies:
+
+npm install
+
+Start the development server:
+
+npm run dev
+
+The frontend will be available at:
+
+http://localhost:3000
