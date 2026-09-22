@@ -1,0 +1,44 @@
+# fly.toml app configuration file generated for multi-agent-pipeline-api on 2025-12-22T08:12:58+01:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'multi-agent-pipeline-api'
+primary_region = 'arn'
+
+[build]
+
+[env]
+  PORT = '8000'
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ['app']
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 8000
+  processes = ['app']
+
+  [[services.ports]]
+    port = 80
+    handlers = ['http']
+    force_https = true
+
+  [[services.ports]]
+    port = 443
+    handlers = ['tls', 'http']
+
+  [services.concurrency]
+    type = 'requests'
+    hard_limit = 25
+    soft_limit = 20
+
+[[vm]]
+  cpu_kind = 'shared'
+  cpus = 1
+  memory_mb = 512

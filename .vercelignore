@@ -1,0 +1,10 @@
+# Files to ignore when deploying to Vercel
+python-agents/
+.env
+.env.local
+*.md
+!README.md
+SETUP.sh
+QUICKSTART.md
+DEPLOYMENT.md
+

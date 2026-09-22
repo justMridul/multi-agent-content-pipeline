@@ -1,0 +1,21 @@
+# Files to ignore when building Docker image
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+.env
+.env.local
+*.md
+!README.md
+.git/
+.gitignore
+.DS_Store
+test_workflow.py
+visualize_workflow.py
+check_logs.py
+verify_migration.py
+setup_database.py
+run_test.sh
+
